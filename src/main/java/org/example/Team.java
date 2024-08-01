@@ -1,25 +1,26 @@
 package org.example;
 
+import lombok.Getter;
+
 public class Team {
-    private final long id;
 
-    private final F1Cars[] cars = new F1Cars[2];
+    @Getter
+    private final F1Car[] cars = new F1Car[2];
+    @Getter
+    private final PitStop pitStop;
 
-    private final PitStop pitStop = new PitStop();
 
     public Team(long id) {
-        this.id = id;
+        this.pitStop = new PitStop(id);
         for (int i = 0; i < this.cars.length; i++) {
-            this.cars[i] = new F1Cars(id * 10 + i, pitStop);
+            this.cars[i] = new F1Car(id * 10 + i, pitStop);
         }
         pitStop.start();
     }
 
     public void prepareRace(Race race) {
-        for (int i = 0; i < this.cars.length; i++) {
-            this.cars[i].prepareRace(race);
+        for (F1Car car : this.cars) {
+            car.prepareRace(race);
         }
     }
-
-
 }

@@ -1,37 +1,79 @@
 package org.example;
 
+import lombok.Getter;
+import lombok.extern.log4j.Log4j2;
+
+import java.util.Arrays;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.atomic.AtomicReference;
+
+import static java.util.Objects.isNull;
+
+@Log4j2
 public class PitStop extends Thread {
 
-    PitWorker[] workers = new PitWorker[4];
+    @Getter
+    private final long teamId;
+    private final PitWorker[] workers = new PitWorker[4];
+    private final Semaphore carLimit = new Semaphore(1);
+    @Getter
+    private CountDownLatch workersCountDown;
 
-    public PitStop() {
+    private final AtomicReference<F1Car> currentCar = new AtomicReference<>(null);
+
+    public PitStop(long teamId) {
+        this.teamId = teamId;
         for (int i = 0; i < workers.length; i++) {
             workers[i] = new PitWorker(i, this);
             workers[i].start();
         }
     }
 
-    public void pitline(F1Cars f1Cars) {
-        // TODO условие: на питстоп может заехать только 1 пилот
-        // TODO держим поток до момента смены всех шин
-        // TODO каждую шину меняет отдельный PitWowker поток
-        // TODO дожидаемся когда все PitWorker завершат свою работу над машиной
-        //TODO метод запускается из потока болида, нужна синхронизация с потоком питстопа
+    public void pitline(F1Car f1Car) {
+        try {
+            log.info("[Питстоп {}] Болид {} прибыл на питстоп", teamId, f1Car.getCarId());
+            carLimit.acquire(); // Захватываем блокировку для одного болида
 
-        // TODO отпускаем машину
+            // Помещаем болид на обслуживание
+            currentCar.compareAndSet(null, f1Car);
+            workersCountDown = new CountDownLatch(workers.length);
+
+            synchronized (this) {
+                notifyAll(); // Уведомляем работников о прибытии болида
+            }
+            workersCountDown.await(); // Ожидаем пока все работники не заменят колёса
+        } catch (InterruptedException e) {
+            currentThread().interrupt();
+        } finally {
+            // Отпускаем машину с питстопа, открываем его для следующей
+            currentCar.compareAndSet(f1Car, null);
+            carLimit.release();
+            log.info("[Питстоп {}] Болид {} покинул питстоп", teamId, f1Car.getCarId());
+
+            // Позволяем рабочим брать в обслуживание следующую машину
+            Arrays.stream(workers).forEach(worker -> worker.getGetCarPermission().release());
+        }
     }
 
 
     @Override
     public void run() {
-        while(!isInterrupted()){
+        while (!isInterrupted()) {
             //синхронизируем поступающие болиды и работников питстопа при необходимости
         }
+        Arrays.stream(workers).forEach(Thread::interrupt);
     }
 
-    public F1Cars getCar() {
-        //TODO Блокируем поток до момента поступления машины на питстоп и возвращаем ее
-
-        return null;
+    public synchronized F1Car getCar() {
+        // Блокируем поток до момента поступления машины на питстоп и возвращаем ее
+        while (isNull(currentCar.get())) {
+            try {
+                wait(); // Ожидаем пока болид не прибудет на питстоп
+            } catch (InterruptedException e) {
+                currentThread().interrupt();
+            }
+        }
+        return currentCar.get();
     }
 }

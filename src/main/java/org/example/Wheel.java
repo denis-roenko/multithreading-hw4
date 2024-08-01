@@ -1,9 +1,12 @@
 package org.example;
 
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 
+import static java.lang.Thread.currentThread;
 import static java.lang.Thread.sleep;
 
+@NoArgsConstructor
 public class Wheel {
 
     @Getter
@@ -14,7 +17,7 @@ public class Wheel {
         try {
             sleep(5000);
         } catch (InterruptedException e) {
-            throw new RuntimeException(e);
+            currentThread().interrupt();
         }
         status = 100;
     }
